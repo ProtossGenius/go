@@ -542,15 +542,6 @@ func (b *Builder) build(a *Action) (err error) {
 		}
 	}
 
-	// Write out the _testinginit.go file for any test packages that import "testing".
-	if a.Package.Internal.TestinginitGo != nil {
-		initfile := objdir + "_testinginit.go"
-		if err := b.writeFile(initfile, a.Package.Internal.TestinginitGo); err != nil {
-			return err
-		}
-		gofiles = append([]string{initfile}, gofiles...)
-	}
-
 	// Run cgo.
 	if a.Package.UsesCgo() || a.Package.UsesSwig() {
 		// In a package using cgo, cgo compiles the C, C++ and assembly files with gcc.
@@ -1682,25 +1673,6 @@ func (b *Builder) writeFile(file string, text []byte) error {
 	return ioutil.WriteFile(file, text, 0666)
 }
 
-// appendFile appends the text to file.
-func (b *Builder) appendFile(file string, text []byte) error {
-	if cfg.BuildN || cfg.BuildX {
-		b.Showcmd("", "cat >>%s << 'EOF' # internal\n%sEOF", file, text)
-	}
-	if cfg.BuildN {
-		return nil
-	}
-	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err = f.Write(text); err != nil {
-		return err
-	}
-	return f.Close()
-}
-
 // Install the cgo export header file, if there is one.
 func (b *Builder) installHeader(a *Action) error {
 	src := a.Objdir + "_cgo_install.h"
@@ -2560,8 +2532,7 @@ func (b *Builder) cgo(a *Action, cgoExe, objdir string, pcCFLAGS, pcLDFLAGS, cgo
 	}
 
 	if cfg.BuildToolchainName == "gccgo" {
-		switch cfg.Goarch {
-		case "386", "amd64":
+		if b.gccSupportsFlag([]string{BuildToolchain.compiler()}, "-fsplit-stack") {
 			cgoCFLAGS = append(cgoCFLAGS, "-fsplit-stack")
 		}
 		cgoflags = append(cgoflags, "-gccgo")
